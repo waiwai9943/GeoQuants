@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corn Alpha: Satellite vs Market</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f4f4f9; }
+        .container { display: flex; height: 100vh; }
+        .sidebar { width: 320px; padding: 20px; background: white; border-right: 1px solid #ddd; z-index: 1000; }
+        .main { flex: 1; display: flex; flex-direction: column; }
+        #map { height: 50%; border-bottom: 2px solid #ddd; }
+        .chart-container { height: 50%; padding: 20px; background: white; }
+        input, select, button { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        button { background: #27ae60; color: white; border: none; cursor: pointer; }
+        button:disabled { background: #ccc; }
+        #loading { display: none; text-align: center; color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="sidebar">
+        <h2>🌽 Corn Alpha</h2>
+        <p>Compare Iowa Farm Health (NDRE/NDVI) with Corn Futures Prices.</p>
+        
+        <label>Start Date</label>
+        <input type="date" id="startDate" value="2024-05-01">
+        
+        <label>End Date</label>
+        <input type="date" id="endDate" value="2024-10-30">
+        
+        <label>Index</label>
+        <select id="indexType">
+            <option value="NDRE">NDRE (Red Edge - Recommended)</option>
+            <option value="NDVI">NDVI (Standard)</option>
+        </select>
+
+        <button id="analyzeBtn" onclick="runAnalysis()">Run Analysis</button>
+        <div id="loading">Processing Satellite & Market Data...</div>
+    </div>
+
+    <div class="main">
+        <div id="map"></div>
+        <div class="chart-container">
+            <canvas id="cornChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+<script>
+    // 1. Initialize Map
+    const map = L.map('map').setView([42.03, -93.64], 9); // Iowa
+    L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        maxZoom: 20
+    }).addTo(map);
+
+    // 2. Draw Tool
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+    const drawControl = new L.Control.Draw({
+        draw: { polygon: { allowIntersection: false }, rectangle: true, circle: false, marker: false },
+        edit: { featureGroup: drawnItems }
+    });
+    map.addControl(drawControl);
+
+    let currentPolygon = null;
+    map.on(L.Draw.Event.CREATED, e => {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(e.layer);
+        currentPolygon = e.layer.toGeoJSON().geometry;
+    });
+
+    // 3. Charting Logic
+    let chartInstance = null;
+
+    async function runAnalysis() {
+        if (!currentPolygon) return alert("Please draw a polygon first!");
+        
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('analyzeBtn').disabled = true;
+
+        const payload = {
+            polygon: currentPolygon,
+            startDate: document.getElementById('startDate').value,
+            endDate: document.getElementById('endDate').value,
+            indexType: document.getElementById('indexType').value
+        };
+
+        try {
+            const res = await fetch('/analyze_corn', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            
+            if (data.error) alert("Error: " + data.error);
+            else renderChart(data);
+
+        } catch (e) {
+            console.error(e);
+            alert("Connection Failed");
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = false;
+        }
+    }
+
+    function renderChart(data) {
+        const ctx = document.getElementById('cornChart').getContext('2d');
+        const sat = data.satelliteData;
+        
+        // Map data to XY format for Chart.js
+        const satPoints = sat.dates.map((d, i) => ({ x: d, y: sat.values[i] }));
+        const mktPoints = data.marketData.map(d => ({ x: d.date, y: d.close }));
+
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: `Crop Health (${sat.index})`,
+                        data: satPoints,
+                        borderColor: '#2ecc71', // Green
+                        yAxisID: 'y',
+                        tension: 0.3,
+                        pointRadius: 4
+                    },
+                    {
+                        label: 'Corn Futures Price ($)',
+                        data: mktPoints,
+                        borderColor: '#f1c40f', // Gold
+                        yAxisID: 'y1',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'time', time: { unit: 'month' } },
+                    y: { 
+                        type: 'linear', position: 'left', 
+                        title: { display: true, text: 'Vegetation Index' } 
+                    },
+                    y1: { 
+                        type: 'linear', position: 'right', grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Price (USD)' } 
+                    }
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
