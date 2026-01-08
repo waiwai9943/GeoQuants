@@ -5,6 +5,12 @@ import yfinance as yf
 from flask_cors import CORS
 import tempfile
 from datetime import datetime, timedelta
+import pandas as pd
+try:
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+except ImportError:
+    SARIMAX = None
+
 
 # =========================================================================================
 # INITIALIZATION
@@ -144,35 +150,248 @@ def analyze_corn_health(polygon, start_date, end_date, index_type='NDRE'):
         print(f"Analysis failed: {e}")
         return {"error": str(e)}
 
+
+
 # =========================================================================================
+
+# PREDICTION LOGIC
+
+# =========================================================================================
+
+
+
+def predict_vegetation_sarima(dates, values):
+
+    """
+
+    Predicts future vegetation index values using a SARIMA model.
+
+    
+
+    SARIMA model parameters (p,d,q)(P,D,Q,s) are heuristics and should be tuned for better results,
+
+    for example, by using an ACF/PACF plot analysis or a grid search (e.g., pmdarima library).
+
+    
+
+    - (p,d,q): Non-seasonal order for ARIMA.
+
+    - (P,D,Q,s): Seasonal order for ARIMA.
+
+    - s: The number of time steps for a single seasonal period. Data is in 5-day intervals,
+
+         so a yearly seasonality is approx. 365/5 = 73. We use 12 as a simpler starting point
+
+         assuming some monthly pattern, but this is a key parameter to tune.
+
+    """
+
+    if not SARIMAX:
+
+        raise ImportError("statsmodels is not installed. Please install it with 'pip install statsmodels'")
+
+
+
+    if len(values) < 24: # Need enough data for seasonal model
+
+        return {"error": "Not enough data points to perform a forecast. At least 24 points are recommended."}
+
+
+
+    # Create a pandas Series from the data
+
+    # The data is already in 5-day intervals, which is a regular frequency.
+
+    series = pd.Series(values, index=pd.to_datetime(dates))
+
+
+
+    # SARIMA model - using some example parameters. These should be tuned.
+
+    # Order (p,d,q)
+
+    order = (1, 1, 1) 
+
+    # Seasonal Order (P,D,Q,s)
+
+    # We assume a yearly seasonality, with 's' being the number of periods in a season.
+
+    # With 5-day intervals, s would be ~73 for a year. Let's use 12 as a simpler proxy for monthly patterns.
+
+    seasonal_order = (1, 1, 1, 12) 
+
+    
+
+    try:
+
+        model = SARIMAX(series, order=order, seasonal_order=seasonal_order,
+
+                        enforce_stationarity=False, enforce_invertibility=False)
+
+        
+
+        fit = model.fit(disp=False)
+
+        
+
+        # Forecast for the next 6 steps (i.e., next 30 days)
+
+        forecast_steps = 6
+
+        forecast = fit.get_forecast(steps=forecast_steps)
+
+        
+
+        # Get forecast values and confidence intervals
+
+        pred_values = forecast.predicted_mean.tolist()
+
+        conf_int = forecast.conf_int()
+
+
+
+        # Generate forecast dates
+
+        last_date = series.index[-1]
+
+        forecast_dates = [(last_date + timedelta(days=5 * (i + 1))).strftime('%Y-%m-%d') for i in range(forecast_steps)]
+
+
+
+        return {
+
+            "dates": forecast_dates,
+
+            "values": pred_values,
+
+            "conf_int_lower": conf_int.iloc[:, 0].tolist(),
+
+            "conf_int_upper": conf_int.iloc[:, 1].tolist()
+
+        }
+
+    except Exception as e:
+
+        print(f"SARIMA prediction failed: {e}")
+
+        # Providing a more user-friendly error
+
+        if "LinAlgError" in str(e):
+
+             return {"error": "Prediction failed due to numerical instability. The data may be too uniform or short."}
+
+        return {"error": f"An error occurred during prediction: {e}"}
+
+
+
+
+
+# =========================================================================================
+
 # ROUTES
+
 # =========================================================================================
+
+
 
 @app.route('/')
+
 def index():
+
     return send_from_directory('.', 'index.html')
 
+
+
 @app.route('/analyze_corn', methods=['POST'])
+
 def analyze_corn():
+
     if not credentials:
+
         return jsonify({"error": "GEE credentials missing."}), 500
 
+
+
     data = request.json
+
     polygon = data.get('polygon')
+
     start = data.get('startDate')
+
     end = data.get('endDate')
+
     idx = data.get('indexType', 'NDRE') 
 
+
+
     if not polygon:
+
         return jsonify({"error": "Missing polygon"}), 400
 
+
+
     result = analyze_corn_health(polygon, start, end, idx)
+
     
+
     if "error" in result:
+
         return jsonify(result), 400
+
         
+
     return jsonify(result)
 
+
+
+@app.route('/predict_vegetation', methods=['POST'])
+
+def predict_vegetation():
+
+    if not SARIMAX:
+
+        return jsonify({"error": "Prediction library not installed on server."}), 500
+
+
+
+    data = request.json
+
+    dates = data.get('dates')
+
+    values = data.get('values')
+
+
+
+    if not dates or not values:
+
+        return jsonify({"error": "Missing dates or values for prediction"}), 400
+
+
+
+    result = predict_vegetation_sarima(dates, values)
+
+    
+
+    if "error" in result:
+
+        return jsonify(result), 400
+
+        
+
+    return jsonify(result)
+
+
+
+
+
 if __name__ == '__main__':
+
+    if not SARIMAX:
+
+        print("WARNING: 'statsmodels' library not found. Prediction endpoint will not work.")
+
+        print("Please install it with: pip install statsmodels")
+
     port = int(os.environ.get('PORT', 8080))
+
     app.run(host='0.0.0.0', port=port)

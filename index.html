@@ -9,47 +9,331 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f4f4f9; }
-        .container { display: flex; height: 100vh; }
-        .sidebar { width: 320px; padding: 20px; background: white; border-right: 1px solid #ddd; z-index: 1000; }
-        .main { flex: 1; display: flex; flex-direction: column; }
-        #map { height: 50%; border-bottom: 2px solid #ddd; }
-        .chart-container { height: 50%; padding: 20px; background: white; }
-        input, select, button { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
-        button { background: #27ae60; color: white; border: none; cursor: pointer; }
-        button:disabled { background: #ccc; }
-        #loading { display: none; text-align: center; color: #27ae60; font-weight: bold; }
+        :root {
+            --primary-color: #3a7bd5;
+            --secondary-color: #3a8d5d;
+            --prediction-color: #8e44ad;
+            --background-color: #eef2f7;
+            --sidebar-bg: rgba(255, 255, 255, 0.8);
+            --card-bg: #ffffff;
+            --text-color: #34495e;
+            --text-light: #7f8c8d;
+            --border-color: #dce1e6;
+            --shadow-color: rgba(58, 123, 213, 0.1);
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 360px;
+            background: var(--sidebar-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 25px var(--shadow-color);
+            z-index: 1002; /* Higher than map stuff */
+            transition: width 0.3s ease;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            font-size: 26px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .sidebar h2 .corn-icon {
+            font-size: 32px;
+            margin-right: 10px;
+        }
+
+        .sidebar p {
+            font-weight: 400;
+            color: var(--text-light);
+            margin-bottom: 35px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: var(--text-color);
+            display: block;
+        }
+
+        input[type="date"], select {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+            background-color: rgba(255,255,255,0.8);
+            transition: all 0.3s ease;
+        }
+
+        input[type="date"]:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+        }
+        
+        .options-group {
+            background-color: rgba(255,255,255,0.5);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .checkbox-container input {
+            margin-right: 10px;
+        }
+        
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: auto; /* Pushes buttons to the bottom */
+            padding-top: 20px;
+        }
+
+        #analyzeBtn, #exportBtn, #predictBtn {
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
+
+        #analyzeBtn {
+            grid-column: 1 / -1; /* Full width */
+            background: linear-gradient(45deg, var(--primary-color), #29b6f6);
+            box-shadow: 0 5px 15px rgba(58, 123, 213, 0.3);
+        }
+
+        #analyzeBtn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(58, 123, 213, 0.4);
+        }
+
+        #exportBtn {
+            background: linear-gradient(45deg, #6c757d, #adb5bd);
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+        }
+        
+        #exportBtn:hover {
+             transform: translateY(-3px);
+             box-shadow: 0 8px 20px rgba(108, 117, 125, 0.4);
+        }
+
+        #predictBtn {
+            background: linear-gradient(45deg, var(--prediction-color), #9b59b6);
+            box-shadow: 0 5px 15px rgba(142, 68, 173, 0.3);
+        }
+
+        #predictBtn:hover {
+             transform: translateY(-3px);
+             box-shadow: 0 8px 20px rgba(142, 68, 173, 0.4);
+        }
+
+        #analyzeBtn:disabled, #exportBtn:disabled, #predictBtn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        #loading {
+            display: none;
+            text-align: center;
+            color: var(--secondary-color);
+            font-weight: 500;
+            margin-top: 20px;
+            font-size: 15px;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        #map-container {
+            height: 55%;
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            background-color: var(--background-color);
+            z-index: 1000;
+        }
+        
+        #search-container {
+            position: absolute;
+            top: 10px;
+            right: 50px;
+            z-index: 1001;
+            display: flex;
+            background: #fff;
+            padding: 5px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        #search-box {
+            border: none;
+            outline: none;
+            padding: 8px;
+            font-size: 14px;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        #search-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0 12px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            z-index: 1001;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .chart-wrapper {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chart-container {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 8px 30px var(--shadow-color);
+            padding: 25px;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        #resetZoomBtn {
+            position: absolute;
+            top: 15px;
+            right: 50px;
+            background: #fdfdfd;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            z-index: 1001;
+            display: none; /* Hidden by default */
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="sidebar">
-        <h2>🌽 Corn Alpha</h2>
-        <p>Compare Iowa Farm Health (NDRE/NDVI) with Corn Futures Prices.</p>
-        
-        <label>Start Date</label>
-        <input type="date" id="startDate" value="2024-05-01">
-        
-        <label>End Date</label>
-        <input type="date" id="endDate" value="2024-10-30">
-        
-        <label>Index</label>
+<div class="sidebar">
+    <h2><span class="corn-icon">🌽</span>Corn Alpha</h2>
+    <p>Harnessing satellite imagery and market data to unveil agricultural insights in the Iowa corn belt.</p>
+    
+    <label for="startDate">Analysis Start Date</label>
+    <input type="date" id="startDate" value="2024-05-01">
+    
+    <label for="endDate">Analysis End Date</label>
+    <input type="date" id="endDate" value="2024-10-30">
+    
+    <div class="options-group">
+        <label for="indexType">Vegetation Index</label>
         <select id="indexType">
-            <option value="NDRE">NDRE (Red Edge - Recommended)</option>
-            <option value="NDVI">NDVI (Standard)</option>
+            <option value="NDRE">NDRE (Chlorophyll Content)</option>
+            <option value="NDVI">NDVI (Overall Health)</option>
         </select>
 
-        <button id="analyzeBtn" onclick="runAnalysis()">Run Analysis</button>
-        <div id="loading">Processing Satellite & Market Data...</div>
+        <div class="checkbox-container">
+            <input type="checkbox" id="logScale" onchange="updateChartData()">
+            <label for="logScale">Use Log Scale on Index</label>
+        </div>
     </div>
 
-    <div class="main">
+
+    <div id="loading">🛰️ Processing Satellite & Market Data...</div>
+
+    <div class="button-group">
+        <button id="analyzeBtn" onclick="runAnalysis()">Run Analysis</button>
+        <button id="exportBtn" onclick="exportDataToCSV()" disabled>Export CSV</button>
+        <button id="predictBtn" onclick="runPrediction()" disabled>Predict</button>
+    </div>
+</div>
+
+<div class="main-content">
+    <div id="map-container">
         <div id="map"></div>
+        <div id="search-container">
+            <input type="text" id="search-box" placeholder="Search for a location...">
+            <button id="search-btn" onclick="searchLocation()">⌕</button>
+        </div>
+        <div class="map-overlay">Draw a polygon on the map to select an area of interest.</div>
+    </div>
+    <div class="chart-wrapper">
         <div class="chart-container">
             <canvas id="cornChart"></canvas>
+            <button id="resetZoomBtn" onclick="resetZoom()">Reset Zoom</button>
         </div>
     </div>
 </div>
@@ -59,17 +343,85 @@
 
 <script>
     // 1. Initialize Map
-    const map = L.map('map').setView([42.03, -93.64], 9); // Iowa
-    L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        maxZoom: 20
-    }).addTo(map);
+    const map = L.map('map', {
+        zoomControl: false // Custom zoom control position
+    }).setView([39.8283, -98.5795], 4); // Centered on continental US
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    
+    const baseLayers = {
+        'Map': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }),
+        'Satellite': L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
+            subdomains:['mt0','mt1','mt2','mt3'],
+            maxZoom: 20,
+            attribution: 'Google Satellite'
+        })
+    };
 
-    // 2. Draw Tool
+    baseLayers['Map'].addTo(map);
+    L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
+
+    // Add US States Boundaries
+    fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+        .then(response => response.json())
+        .then(data => {
+            L.geoJSON(data, {
+                style: {
+                    color: "var(--primary-color)",
+                    weight: 1,
+                    opacity: 0.6,
+                    fillColor: "var(--primary-color)",
+                    fillOpacity: 0.05
+                }
+            }).addTo(map);
+        });
+        
+    // 2. Location Search
+    async function searchLocation() {
+        const query = document.getElementById('search-box').value;
+        if (!query) return;
+
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
+        
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const { lat, lon } = data[0];
+                map.flyTo([lat, lon], 12); // Fly to the location with a zoom level of 12
+            } else {
+                alert('Location not found.');
+            }
+        } catch (error) {
+            console.error('Error during geocoding:', error);
+            alert('Failed to search for location.');
+        }
+    }
+    
+    document.getElementById('search-box').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            searchLocation();
+        }
+    });
+
+    // 3. Draw Tool
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
     const drawControl = new L.Control.Draw({
-        draw: { polygon: { allowIntersection: false }, rectangle: true, circle: false, marker: false },
+        position: 'bottomright',
+        draw: { 
+            polygon: { 
+                allowIntersection: false,
+                shapeOptions: { color: 'var(--secondary-color)', weight: 2.5 }
+            }, 
+            rectangle: {
+                shapeOptions: { color: 'var(--secondary-color)', weight: 2.5 }
+            }, 
+            circle: false, marker: false, polyline: false
+        },
         edit: { featureGroup: drawnItems }
     });
     map.addControl(drawControl);
@@ -79,16 +431,30 @@
         drawnItems.clearLayers();
         drawnItems.addLayer(e.layer);
         currentPolygon = e.layer.toGeoJSON().geometry;
+        document.querySelector('.map-overlay').style.display = 'none';
     });
 
-    // 3. Charting Logic
+    map.on(L.Draw.Event.EDITED, e => {
+        e.layers.eachLayer(layer => currentPolygon = layer.toGeoJSON().geometry);
+    });
+
+    // 4. Charting & Analysis Logic
     let chartInstance = null;
+    let originalChartData = null;
 
     async function runAnalysis() {
-        if (!currentPolygon) return alert("Please draw a polygon first!");
+        if (!currentPolygon) {
+            alert("Please draw a polygon or rectangle on the map to define your analysis area.");
+            return;
+        }
         
-        document.getElementById('loading').style.display = 'block';
+        const loadingDiv = document.getElementById('loading');
+        loadingDiv.textContent = '🛰️ Processing Satellite & Market Data...';
+        loadingDiv.style.display = 'block';
+
         document.getElementById('analyzeBtn').disabled = true;
+        document.getElementById('exportBtn').disabled = true;
+        document.getElementById('predictBtn').disabled = true;
 
         const payload = {
             polygon: currentPolygon,
@@ -103,27 +469,62 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
             });
-            const data = await res.json();
             
-            if (data.error) alert("Error: " + data.error);
-            else renderChart(data);
+            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            
+            // Store raw data
+            originalChartData = data;
+            renderChart();
 
         } catch (e) {
             console.error(e);
-            alert("Connection Failed");
+            alert("Analysis Failed: " + e.message);
         } finally {
-            document.getElementById('loading').style.display = 'none';
+            loadingDiv.style.display = 'none';
             document.getElementById('analyzeBtn').disabled = false;
         }
     }
+    
+    function updateChartData() {
+        if (!chartInstance || !originalChartData) return;
 
-    function renderChart(data) {
-        const ctx = document.getElementById('cornChart').getContext('2d');
-        const sat = data.satelliteData;
+        const useLog = document.getElementById('logScale').checked;
+        const sat = originalChartData.satelliteData;
         
-        // Map data to XY format for Chart.js
-        const satPoints = sat.dates.map((d, i) => ({ x: d, y: sat.values[i] }));
-        const mktPoints = data.marketData.map(d => ({ x: d.date, y: d.close }));
+        // Process satellite data (log or normal)
+        const satPoints = sat.dates.map((d, i) => ({
+            x: new Date(d), 
+            y: useLog ? Math.log(sat.values[i]) : sat.values[i] 
+        }));
+        
+        // Update chart dataset and Y-axis title
+        chartInstance.data.datasets[0].data = satPoints;
+        chartInstance.data.datasets[0].label = useLog ? `Log(Crop Health)` : `Crop Health (${sat.index})`;
+        chartInstance.options.scales.y.title.text = useLog ? `Log(Veg. Index ${sat.index})` : `Vegetation Index (${sat.index})`;
+        
+        // Clear predictions when changing scale
+        if (chartInstance.data.datasets.length > 2) {
+             while(chartInstance.data.datasets.length > 2) {
+                chartInstance.data.datasets.pop();
+            }
+        }
+
+        chartInstance.update();
+    }
+
+    function renderChart() {
+        const ctx = document.getElementById('cornChart').getContext('2d');
+        const sat = originalChartData.satelliteData;
+        const mkt = originalChartData.marketData;
+        
+        const useLog = document.getElementById('logScale').checked;
+        const satPoints = sat.dates.map((d, i) => ({
+            x: new Date(d), 
+            y: useLog ? Math.log(sat.values[i]) : sat.values[i] 
+        }));
+        const mktPoints = mkt.map(d => ({ x: new Date(d.date), y: d.close }));
 
         if (chartInstance) chartInstance.destroy();
 
@@ -132,41 +533,221 @@
             data: {
                 datasets: [
                     {
-                        label: `Crop Health (${sat.index})`,
+                        label: useLog ? `Log(Crop Health)` : `Crop Health (${sat.index})`,
                         data: satPoints,
-                        borderColor: '#2ecc71', // Green
+                        borderColor: 'var(--secondary-color)',
+                        backgroundColor: 'rgba(58, 141, 93, 0.1)',
                         yAxisID: 'y',
-                        tension: 0.3,
-                        pointRadius: 4
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointBackgroundColor: 'var(--secondary-color)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
                     },
                     {
                         label: 'Corn Futures Price ($)',
                         data: mktPoints,
-                        borderColor: '#f1c40f', // Gold
+                        borderColor: '#f39c12',
+                        backgroundColor: 'rgba(243, 156, 18, 0.1)',
                         yAxisID: 'y1',
                         borderWidth: 2,
+                        fill: true,
                         pointRadius: 0,
-                        tension: 0.1
+                        tension: 0.3
                     }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 scales: {
-                    x: { type: 'time', time: { unit: 'month' } },
+                    x: { 
+                        type: 'time', 
+                        time: { unit: 'week', tooltipFormat: 'MMM dd, yyyy' },
+                        title: { display: true, text: 'Date', font: { size: 14, weight: '500' } },
+                        grid: { display: false }
+                    },
                     y: { 
                         type: 'linear', position: 'left', 
-                        title: { display: true, text: 'Vegetation Index' } 
+                        title: { display: true, text: useLog ? `Log(Veg. Index ${sat.index})` : `Vegetation Index (${sat.index})`, font: { size: 14, weight: '500' } },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
                     },
                     y1: { 
-                        type: 'linear', position: 'right', grid: { drawOnChartArea: false },
-                        title: { display: true, text: 'Price (USD)' } 
+                        type: 'linear', position: 'right', 
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Price (USD)', font: { size: 14, weight: '500' } } 
                     }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: { size: 14, weight: '500' },
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            padding: 20
+                        }
+                    },
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                        onZoomComplete: () => document.getElementById('resetZoomBtn').style.display = 'block',
+                    },
+                    tooltip: {
+                        enabled: true,
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                        titleFont: { size: 14, weight: '600' },
+                        bodyFont: { size: 12 },
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: true,
+                        boxPadding: 4
+                    },
                 }
             }
         });
+        
+        document.getElementById('exportBtn').disabled = false;
+        document.getElementById('predictBtn').disabled = false;
+        document.getElementById('resetZoomBtn').style.display = 'none';
+    }
+    
+    function resetZoom(){
+        if(chartInstance) {
+            chartInstance.resetZoom();
+            document.getElementById('resetZoomBtn').style.display = 'none';
+        }
+    }
+
+    async function runPrediction() {
+        if (!chartInstance) {
+            alert("Please run an analysis first.");
+            return;
+        }
+
+        const loadingDiv = document.getElementById('loading');
+        loadingDiv.textContent = '🧠 Running SARIMA Forecast...';
+        loadingDiv.style.display = 'block';
+        document.getElementById('predictBtn').disabled = true;
+
+        const satData = chartInstance.data.datasets[0].data;
+        const payload = {
+            dates: satData.map(p => p.x),
+            values: satData.map(p => p.y)
+        };
+
+        try {
+            const res = await fetch('/predict_vegetation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error(`Server Error: ${res.statusText}`);
+            const predData = await res.json();
+            if (predData.error) throw new Error(predData.error);
+            
+            if (chartInstance.data.datasets.length > 2) {
+                while(chartInstance.data.datasets.length > 2) {
+                    chartInstance.data.datasets.pop();
+                }
+            }
+            
+            const predPoints = predData.dates.map((d, i) => ({ x: new Date(d), y: predData.values[i] }));
+
+            chartInstance.data.datasets.push({
+                label: 'Vegetation Forecast',
+                data: predPoints,
+                borderColor: 'var(--prediction-color)',
+                borderDash: [5, 5],
+                yAxisID: 'y',
+                tension: 0.4,
+                fill: false,
+                pointRadius: 4,
+                pointBackgroundColor: 'var(--prediction-color)'
+            });
+            
+            const confIntLower = predData.dates.map((d, i) => ({ x: new Date(d), y: predData.conf_int_lower[i] }));
+            const confIntUpper = predData.dates.map((d, i) => ({ x: new Date(d), y: predData.conf_int_upper[i] }));
+
+            chartInstance.data.datasets.push({
+                label: 'Forecast Upper Bound',
+                data: confIntUpper, yAxisID: 'y', fill: false, pointRadius: 0,
+                borderColor: 'rgba(142, 68, 173, 0.2)', borderWidth: 1,
+            });
+
+            chartInstance.data.datasets.push({
+                label: 'Forecast Lower Bound',
+                data: confIntLower,
+                yAxisID: 'y',
+                fill: '-1',
+                backgroundColor: 'rgba(142, 68, 173, 0.1)',
+                pointRadius: 0,
+                borderColor: 'rgba(142, 68, 173, 0.2)',
+                borderWidth: 1,
+            });
+
+            chartInstance.update();
+
+        } catch (e) {
+            console.error(e);
+            alert("Prediction failed: " + e.message);
+        } finally {
+            loadingDiv.style.display = 'none';
+            document.getElementById('predictBtn').disabled = false;
+        }
+    }
+
+    function exportDataToCSV() {
+        if (!originalChartData) {
+            alert("No data available to export.");
+            return;
+        }
+
+        const sat = originalChartData.satelliteData;
+        const mkt = originalChartData.marketData;
+        
+        const satData = sat.dates.map((d, i) => ({ x: new Date(d), y: sat.values[i] }));
+        const mktData = mkt.map(d => ({ x: new Date(d.date), y: d.close }));
+        const indexName = `Vegetation Index (${sat.index})`;
+
+        let csvContent = `date,${indexName},Corn Futures Price ($)\n`;
+        
+        const allDates = [...new Set([...satData.map(p => p.x), ...mktData.map(p => p.x)])].sort((a,b) => a - b);
+
+        allDates.forEach(date => {
+            const d = new Date(date);
+            const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            
+            const satPoint = satData.find(p => p.x.toDateString() === d.toDateString());
+            const mktPoint = mktData.find(p => p.x.toDateString() === d.toDateString());
+
+            const satValue = satPoint ? satPoint.y.toFixed(4) : '';
+            const mktValue = mktPoint ? mktPoint.y.toFixed(2) : '';
+            
+            csvContent += `${dateString},${satValue},${mktValue}\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "corn_alpha_data.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     }
 </script>
+
 </body>
 </html>
