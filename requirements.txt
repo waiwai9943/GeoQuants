@@ -1,0 +1,7 @@
+Flask
+google-api-python-client
+yfinance
+Flask-Cors
+earthengine-api
+statsmodels
+pandas

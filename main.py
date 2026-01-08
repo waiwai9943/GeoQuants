@@ -45,6 +45,7 @@ def initialize_gee_credentials():
             print("Google Earth Engine initialized successfully!")
         except Exception as e:
             print(f"Failed to initialize GEE: {e}")
+            credentials = None
 
 initialize_gee_credentials()
 
@@ -67,19 +68,58 @@ def get_corn_futures(start_date, end_date):
     """Fetches Corn Futures (ZC=F) data from Yahoo Finance."""
     try:
         # ZC=F is the ticker for Corn Futures on Yahoo Finance
-        ticker = yf.Ticker("ZC=F")
-        df = ticker.history(start=start_date, end=end_date)
+        tickers = yf.Tickers("ZC=F")
+        df = tickers.download(start=start_date, end=end_date)
         
         if df.empty:
             return []
 
-        results = []
-        for date, row in df.iterrows():
-            results.append({
-                "date": date.strftime('%Y-%m-%d'),
-                "close": round(row['Close'], 2)
-            })
-        return results
+        # Handle MultiIndex columns (common in new yfinance)
+        # If columns are MultiIndex, accessing 'Close' might return a DataFrame
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.droplevel(1)  # Drop ticker level if present
+
+        df = df.reset_index()
+        
+        # Ensure we find the Date column (sometimes it's index, sometimes column)
+        date_col = None
+        for col in df.columns:
+            if str(col).lower() == 'date':
+                date_col = col
+                break
+        
+        if not date_col:
+             # Fallback if reset_index failed to name it 'Date'
+             if pd.api.types.is_datetime64_any_dtype(df.index):
+                 df['date'] = df.index.strftime('%Y-%m-%d')
+             else:
+                 # Try to find any datetime column
+                 for col in df.columns:
+                     if pd.api.types.is_datetime64_any_dtype(df[col]):
+                         df['date'] = df[col].dt.strftime('%Y-%m-%d')
+                         break
+        else:
+            df['date'] = df[date_col].dt.strftime('%Y-%m-%d')
+
+        if 'date' not in df.columns:
+            print("Could not identify Date column")
+            return []
+
+        # Handle Close column
+        if 'Close' in df.columns:
+            # Ensure it is a Series (handle potential DataFrame if multiple cols named Close existed)
+            close_data = df['Close']
+            if isinstance(close_data, pd.DataFrame):
+                close_data = close_data.iloc[:, 0]
+            
+            # Convert to native float to ensure JSON serializability
+            df['close'] = close_data.apply(lambda x: round(float(x), 2))
+        else:
+             print("Close column not found")
+             return []
+        
+        return df[['date', 'close']].to_dict('records')
+
     except Exception as e:
         print(f"Yahoo Finance Error: {e}")
         return []
@@ -346,39 +386,93 @@ def analyze_corn():
 
 @app.route('/predict_vegetation', methods=['POST'])
 
+
+
 def predict_vegetation():
 
+
+
     if not SARIMAX:
+
+
 
         return jsonify({"error": "Prediction library not installed on server."}), 500
 
 
 
+
+
+
+
     data = request.json
 
+
+
     dates = data.get('dates')
+
+
 
     values = data.get('values')
 
 
 
+
+
+
+
     if not dates or not values:
+
+
 
         return jsonify({"error": "Missing dates or values for prediction"}), 400
 
 
 
+
+
+
+
     result = predict_vegetation_sarima(dates, values)
+
+
 
     
 
+
+
     if "error" in result:
+
+
 
         return jsonify(result), 400
 
+
+
         
 
+
+
     return jsonify(result)
+
+
+
+
+
+
+
+
+
+
+
+@app.route('/health')
+
+
+
+def health_check():
+
+
+
+    return jsonify({"status": "OK"})
 
 
 
