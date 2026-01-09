@@ -7,8 +7,9 @@
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.4.0/dist/chartjs-chart-financial.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     
@@ -222,11 +223,13 @@
             display: flex;
             flex-direction: column;
             position: relative;
+            overflow: hidden;
         }
         
         #map-container {
-            height: 60vh;
+            flex: 1;
             position: relative;
+            width: 100%;
         }
 
         #map {
@@ -248,60 +251,11 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
 
-        #state-selector-container {
-            display: flex;
-            flex-direction: column;
-        }
-
-        #search-box {
-            border: none;
-            outline: none;
-            padding: 8px;
-            font-size: 1vw;
-            font-family: 'Poppins', sans-serif;
-        }
-
-        #search-btn {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 0 12px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-
-        .map-overlay {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 5px 10px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(10px);
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            z-index: 1001;
-            font-weight: 500;
-            font-size: 10px;
-            color: var(--text-color);
-            display: flex;
-            align-items: center;
-        }
-
-        .close-overlay-btn {
-            margin-left: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            color: #aaa;
-        }
-
-        .close-overlay-btn:hover {
-            color: #333;
-        }
+        /* ... (Keep intermediate CSS if any) ... */
 
         .chart-wrapper {
-            flex: 1;
+            height: 40vh;
+            flex: none;
             padding: 20px;
             display: flex;
             flex-direction: column;
@@ -309,17 +263,61 @@
             justify-content: center;
             transition: all 0.3s ease;
             position: relative;
+            background-color: var(--background-color);
+            z-index: 1002;
+            box-sizing: border-box;
         }
 
         .chart-container {
             background: var(--card-bg);
             border-radius: 12px;
             box-shadow: 0 8px 30px var(--shadow-color);
-            padding: 25px;
+            padding: 15px 25px 25px 25px; /* Adjusted padding */
             width: 100%;
             height: 100%;
             box-sizing: border-box;
             position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            min-height: 25px;
+            padding-right: 80px; /* Space for controls */
+        }
+
+        .chart-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9vw;
+            color: var(--text-color);
+            background: rgba(58, 123, 213, 0.1);
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+
+        .stat-item {
+            white-space: nowrap;
+        }
+        
+        .stat-item b {
+            color: var(--primary-color);
+        }
+
+        .chart-toggles {
+            display: flex;
+            align-items: center;
+        }
+
+        #cornChart {
+            flex: 1;
+            width: 100% !important;
+            height: 100% !important; /* Managed by flex */
+            min-height: 0;
         }
 
         #resetZoomBtn {
@@ -359,22 +357,12 @@
 
         .chart-wrapper.minimized {
             height: 50px;
-            flex: none;
-            padding: 0 20px;
-        }
-
-        .chart-wrapper.minimized-bottom {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 50px;
-            flex: none;
             padding: 0 20px;
             background-color: var(--card-bg);
-            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.1);
-            z-index: 1003;
+            border-top: 1px solid var(--border-color);
         }
+
+        /* Removed .chart-wrapper.minimized-bottom as it's no longer needed for flex layout */
 
         .chart-wrapper.minimized .chart-container {
             height: 100%;
@@ -383,9 +371,10 @@
             display: flex;
             align-items: center;
             padding-left: 15px;
+            background: transparent;
         }
         .chart-wrapper.minimized .chart-container::before {
-            content: "Satellite Imagert vs Corn Future";
+            content: "Satellite Imagery vs Corn Future";
             font-weight: 600;
             color: var(--text-color);
         }
@@ -493,6 +482,21 @@
         #stateDropdown {
             margin-top: 5px;
         }
+        .stats-box {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 0.9vw;
+        }
+        .stats-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .stats-label { font-weight: 600; color: var(--text-color); }
+        .stats-value { font-weight: 500; color: var(--primary-color); }
     </style>
 </head>
 <body>
@@ -505,10 +509,10 @@
     <p>Harnessing satellite imagery and market data to unveil agricultural insights in the Iowa corn belt.</p>
     
     <label for="startDate">Analysis Start Date</label>
-    <input type="date" id="startDate" value="2024-05-01">
+    <input type="date" id="startDate" value="2019-01-01">
     
     <label for="endDate">Analysis End Date</label>
-    <input type="date" id="endDate" value="2024-10-30">
+    <input type="date" id="endDate" value="2024-01-30">
     
     <div class="options-group">
         <label for="indexType">Vegetation Index</label>
@@ -516,13 +520,12 @@
             <option value="NDRE">NDRE (Chlorophyll Content)</option>
             <option value="NDVI">NDVI (Overall Health)</option>
         </select>
-
-        <div class="checkbox-container">
-            <input type="checkbox" id="logScale" onchange="updateChartData()">
-            <label for="logScale">Use Log Scale on Index</label>
-        </div>
     </div>
 
+    <div class="button-group" style="margin-bottom: 15px; padding-top: 0;">
+        <button id="saveBtn" onclick="saveSession()" style="background: #34495e; color: white; border: none; border-radius: 8px; padding: 10px; cursor: pointer;">Save Session</button>
+        <button id="loadBtn" onclick="loadSession()" style="background: #34495e; color: white; border: none; border-radius: 8px; padding: 10px; cursor: pointer;">Load Last Session</button>
+    </div>
 
     <div id="loading">🛰️ Processing Satellite & Market Data...</div>
 
@@ -569,6 +572,22 @@
     </div>
     <div class="chart-wrapper">
         <div class="chart-container">
+            <div class="chart-header-row">
+                <div id="stats-panel" class="chart-stats" style="display:none;">
+                    <span class="stat-item">Correlation: <b id="stat-corr">--</b></span>
+                    <span class="stat-item">Volatility: <b id="stat-vol">--</b></span>
+                    <span class="stat-item">Sat Std: <b id="stat-sat">--</b></span>
+                </div>
+                <div class="chart-toggles">
+                    <label style="display:inline-flex; align-items:center; font-size: 0.9vw; cursor:pointer; margin-right: 15px;">
+                        <input type="checkbox" id="showCandles" onchange="updateChartData()" style="width:auto; margin:0 5px 0 0;"> Candlesticks
+                    </label>
+                    <label style="display:inline-flex; align-items:center; font-size: 0.9vw; cursor:pointer;">
+                        <input type="checkbox" id="logScale" onchange="updateChartData()" style="width:auto; margin:0 5px 0 0;"> Log Scale
+                    </label>
+                </div>
+            </div>
+            
             <canvas id="cornChart"></canvas>
             <button id="resetZoomBtn" onclick="resetZoom()">Reset Zoom</button>
             <div class="chart-controls">
@@ -735,6 +754,97 @@
     let chartInstance = null;
     let originalChartData = null;
 
+    function displayStats(stats) {
+        const container = document.getElementById('stats-panel');
+        if (!stats || Object.keys(stats).length === 0 || stats.message) {
+            container.style.display = 'none';
+            return;
+        }
+        container.style.display = 'flex';
+        document.getElementById('stat-corr').textContent = stats.pearson_correlation || 'N/A';
+        document.getElementById('stat-vol').textContent = stats.market_volatility || 'N/A';
+        document.getElementById('stat-sat').textContent = stats.sat_index_std || 'N/A';
+    }
+
+    async function saveSession() {
+        if (!currentPolygon && !originalChartData) {
+            alert("Nothing to save. Please select an area or run an analysis first.");
+            return;
+        }
+
+        const payload = {
+            polygon: currentPolygon,
+            startDate: document.getElementById('startDate').value,
+            endDate: document.getElementById('endDate').value,
+            indexType: document.getElementById('indexType').value,
+            chartData: originalChartData
+        };
+
+        try {
+            const res = await fetch('/save_session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            alert("Session saved successfully!");
+        } catch (e) {
+            alert("Failed to save session: " + e.message);
+        }
+    }
+
+    async function loadSession() {
+        try {
+            const res = await fetch('/load_session');
+            const data = await res.json();
+            
+            if (!data || Object.keys(data).length === 0) {
+                alert("No saved session found.");
+                return;
+            }
+
+            if (data.startDate) document.getElementById('startDate').value = data.startDate;
+            if (data.endDate) document.getElementById('endDate').value = data.endDate;
+            if (data.indexType) document.getElementById('indexType').value = data.indexType;
+
+            // Restore Polygon
+            if (data.polygon) {
+                currentPolygon = data.polygon;
+                drawnItems.clearLayers();
+                if (selectedStateLayer) {
+                    map.removeLayer(selectedStateLayer);
+                    selectedStateLayer = null;
+                }
+                
+                const layer = L.geoJSON(currentPolygon, {
+                     style: { color: 'var(--secondary-color)', weight: 2.5 }
+                });
+                
+                // L.geoJSON creates a layer group, we need the individual layer for drawnItems if possible
+                // But for visualization, adding the group is fine.
+                // To make it editable by Leaflet.Draw, we need to extract layers.
+                layer.eachLayer(l => {
+                    drawnItems.addLayer(l);
+                    map.fitBounds(l.getBounds());
+                });
+                document.getElementById('mapOverlay').style.display = 'none';
+            }
+
+            // Restore Chart
+            if (data.chartData) {
+                originalChartData = data.chartData;
+                if (data.chartData.statistics) displayStats(data.chartData.statistics);
+                maximizeChart();
+                renderChart();
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("Failed to load session: " + e.message);
+        }
+    }
+
     async function runAnalysis() {
         if (!currentPolygon) {
             alert("Please draw a polygon or rectangle on the map to define your analysis area.");
@@ -769,6 +879,8 @@
             
             // Store raw data
             originalChartData = data;
+            if (data.statistics) displayStats(data.statistics);
+            maximizeChart();
             renderChart();
 
         } catch (e) {
@@ -781,137 +893,148 @@
     }
     
     function updateChartData() {
-        if (!chartInstance || !originalChartData) return;
-
-        const useLog = document.getElementById('logScale').checked;
-        const sat = originalChartData.satelliteData;
-        
-        // Process satellite data (log or normal)
-        const satPoints = sat.dates.map((d, i) => ({
-            x: new Date(d), 
-            y: useLog ? Math.log(sat.values[i]) : sat.values[i] 
-        }));
-        
-        // Update chart dataset and Y-axis title
-        chartInstance.data.datasets[0].data = satPoints;
-        chartInstance.data.datasets[0].label = useLog ? `Log(Crop Health)` : `Crop Health (${sat.index})`;
-        chartInstance.options.scales.y.title.text = useLog ? `Log(Veg. Index ${sat.index})` : `Vegetation Index (${sat.index})`;
-        
-        // Clear predictions when changing scale
-        if (chartInstance.data.datasets.length > 2) {
-             while(chartInstance.data.datasets.length > 2) {
-                chartInstance.data.datasets.pop();
-            }
-        }
-
-        chartInstance.update();
+        // Re-render to handle type changes (candlestick vs line) correctly
+        if (originalChartData) renderChart();
     }
 
-    function renderChart() {
-        const ctx = document.getElementById('cornChart').getContext('2d');
-        const sat = originalChartData.satelliteData;
-        const mkt = originalChartData.marketData;
-        
-        const useLog = document.getElementById('logScale').checked;
-        const satPoints = sat.dates.map((d, i) => ({
-            x: new Date(d), 
-            y: useLog ? Math.log(sat.values[i]) : sat.values[i] 
-        }));
-        const mktPoints = mkt.map(d => ({ x: new Date(d.date), y: d.close }));
-
-        if (chartInstance) chartInstance.destroy();
-
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                datasets: [
-                    {
-                        label: useLog ? `Log(Crop Health)` : `Crop Health (${sat.index})`,
-                        data: satPoints,
-                        borderColor: 'var(--secondary-color)',
-                        backgroundColor: 'rgba(58, 141, 93, 0.1)',
-                        yAxisID: 'y',
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 3,
-                        pointBackgroundColor: 'var(--secondary-color)',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                    },
-                    {
-                        label: 'Corn Futures Price ($)',
-                        data: mktPoints,
-                        borderColor: '#f39c12',
-                        backgroundColor: 'rgba(243, 156, 18, 0.1)',
-                        yAxisID: 'y1',
-                        borderWidth: 2,
-                        fill: true,
-                        pointRadius: 0,
-                        tension: 0.3
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
+        function renderChart() {
+            const ctx = document.getElementById('cornChart').getContext('2d');
+            const sat = originalChartData.satelliteData;
+            const mkt = originalChartData.marketData;
+            
+            const useLog = document.getElementById('logScale').checked;
+            const showCandles = document.getElementById('showCandles').checked;
+    
+            // Satellite data is always linear now
+            const satPoints = sat.dates.map((d, i) => ({
+                x: new Date(d), 
+                y: sat.values[i] 
+            }));
+    
+            let mktDataset;
+            
+            if (showCandles) {
+                // Candlestick Data
+                const candleData = mkt.map(d => ({
+                    x: new Date(d.date),
+                    o: useLog ? Math.log(d.open) : d.open,
+                    h: useLog ? Math.log(d.high) : d.high,
+                    l: useLog ? Math.log(d.low) : d.low,
+                    c: useLog ? Math.log(d.close) : d.close
+                }));
+                
+                mktDataset = {
+                    label: useLog ? 'Log(Corn Price)' : 'Corn Price ($)',
+                    data: candleData,
+                    type: 'candlestick',
+                    yAxisID: 'y1',
+                    borderColor: '#f39c12',
+                    backgroundColor: '#f39c12', 
+                };
+            } else {
+                // Line Data
+                const mktPoints = mkt.map(d => ({
+                    x: new Date(d.date),
+                    y: useLog ? Math.log(d.close) : d.close 
+                }));
+                
+                mktDataset = {
+                    label: useLog ? 'Log(Corn Futures Price)' : 'Corn Futures Price ($)',
+                    data: mktPoints,
+                    type: 'line',
+                    borderColor: '#f39c12',
+                    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                    yAxisID: 'y1',
+                    borderWidth: 2,
+                    fill: true,
+                    pointRadius: 0,
+                    tension: 0.3
+                };
+            }
+    
+            if (chartInstance) chartInstance.destroy();
+    
+            chartInstance = new Chart(ctx, {
+                type: 'line', // Default type, mixed chart
+                data: {
+                    datasets: [
+                        {
+                            label: `Crop Health (${sat.index})`,
+                            data: satPoints,
+                            type: 'line',
+                            borderColor: 'var(--secondary-color)',
+                            backgroundColor: 'rgba(58, 141, 93, 0.1)',
+                            yAxisID: 'y',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 3,
+                            pointBackgroundColor: 'var(--secondary-color)',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                        },
+                        mktDataset
+                    ]
                 },
-                scales: {
-                    x: { 
-                        type: 'time', 
-                        time: { unit: 'week', tooltipFormat: 'MMM dd, yyyy' },
-                        title: { display: true, text: 'Date', font: { size: 14, weight: '500' } },
-                        grid: { display: false }
-                    },
-                    y: { 
-                        type: 'linear', position: 'left', 
-                        title: { display: true, text: useLog ? `Log(Veg. Index ${sat.index})` : `Vegetation Index (${sat.index})`, font: { size: 14, weight: '500' } },
-                        grid: { color: 'rgba(0,0,0,0.05)' }
-                    },
-                    y1: { 
-                        type: 'linear', position: 'right', 
-                        grid: { drawOnChartArea: false },
-                        title: { display: true, text: 'Price (USD)', font: { size: 14, weight: '500' } } 
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            font: { size: 14, weight: '500' },
-                            usePointStyle: true,
-                            pointStyle: 'circle',
-                            padding: 20
-                        }
-                    },
-                    zoom: {
-                        pan: { enabled: true, mode: 'x' },
-                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-                        onZoomComplete: () => document.getElementById('resetZoomBtn').style.display = 'block',
-                    },
-                    tooltip: {
-                        enabled: true,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
                         mode: 'index',
                         intersect: false,
-                        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                        titleFont: { size: 14, weight: '600' },
-                        bodyFont: { size: 12 },
-                        padding: 12,
-                        cornerRadius: 8,
-                        displayColors: true,
-                        boxPadding: 4
                     },
+                    scales: {
+                        x: { 
+                            type: 'time', 
+                            time: { unit: 'week', tooltipFormat: 'MMM dd, yyyy' },
+                            title: { display: true, text: 'Date', font: { size: 14, weight: '500' } },
+                            grid: { display: false }
+                        },
+                        y: { 
+                            type: 'linear', position: 'left', 
+                            title: { display: true, text: `Vegetation Index (${sat.index})`, font: { size: 14, weight: '500' } },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        y1: { 
+                            type: 'linear', position: 'right', 
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: useLog ? 'Log(Price USD)' : 'Price (USD)', font: { size: 14, weight: '500' } } 
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { size: 14, weight: '500' },
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                padding: 20
+                            }
+                        },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                            onZoomComplete: () => document.getElementById('resetZoomBtn').style.display = 'block',
+                        },
+                        tooltip: {
+                            enabled: true,
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                            titleFont: { size: 14, weight: '600' },
+                            bodyFont: { size: 12 },
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            boxPadding: 4
+                        },
+                    }
                 }
-            }
-        });
-        
-        document.getElementById('exportBtn').disabled = false;
-        document.getElementById('predictBtn').disabled = false;
-        document.getElementById('resetZoomBtn').style.display = 'none';
-    }
-    
+            });
+            
+            document.getElementById('exportBtn').disabled = false;
+            document.getElementById('predictBtn').disabled = false;
+            document.getElementById('resetZoomBtn').style.display = 'none';
+        }    
     function resetZoom(){
         if(chartInstance) {
             chartInstance.resetZoom();
@@ -924,9 +1047,14 @@
         const minimizeBtn = document.getElementById('minimizeChartBtn');
         const maximizeBtn = document.getElementById('maximizeChartBtn');
 
-        chartWrapper.classList.add('minimized', 'minimized-bottom');
+        chartWrapper.classList.add('minimized');
         minimizeBtn.style.display = 'none';
         maximizeBtn.style.display = 'block';
+        
+        // Wait for transition to finish then resize map
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 300);
     }
 
     function maximizeChart() {
@@ -934,7 +1062,7 @@
         const minimizeBtn = document.getElementById('minimizeChartBtn');
         const maximizeBtn = document.getElementById('maximizeChartBtn');
 
-        chartWrapper.classList.remove('minimized', 'minimized-bottom');
+        chartWrapper.classList.remove('minimized');
         minimizeBtn.style.display = 'block';
         maximizeBtn.style.display = 'none';
 
@@ -942,6 +1070,7 @@
             if (chartInstance) {
                 chartInstance.resize();
             }
+            map.invalidateSize();
         }, 300);
     }
 
@@ -1082,6 +1211,11 @@
             hideInfo();
         }
     }
+
+    // Initialize in minimized state
+    document.addEventListener('DOMContentLoaded', () => {
+        minimizeChart();
+    });
 </script>
 
 </body>

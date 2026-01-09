@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 import ee
 import os
+import json
 import yfinance as yf
 from flask_cors import CORS
 import tempfile
@@ -69,19 +70,18 @@ def get_corn_futures(start_date, end_date):
     try:
         # ZC=F is the ticker for Corn Futures on Yahoo Finance
         tickers = yf.Tickers("ZC=F")
-        df = tickers.download(start=start_date, end=end_date)
+        df = tickers.download(start=start_date, end=end_date, progress=False)
         
         if df.empty:
             return []
 
         # Handle MultiIndex columns (common in new yfinance)
-        # If columns are MultiIndex, accessing 'Close' might return a DataFrame
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.droplevel(1)  # Drop ticker level if present
 
         df = df.reset_index()
         
-        # Ensure we find the Date column (sometimes it's index, sometimes column)
+        # Ensure we find the Date column
         date_col = None
         for col in df.columns:
             if str(col).lower() == 'date':
@@ -89,36 +89,53 @@ def get_corn_futures(start_date, end_date):
                 break
         
         if not date_col:
-             # Fallback if reset_index failed to name it 'Date'
              if pd.api.types.is_datetime64_any_dtype(df.index):
                  df['date'] = df.index.strftime('%Y-%m-%d')
+                 date_col = 'date'
              else:
-                 # Try to find any datetime column
                  for col in df.columns:
                      if pd.api.types.is_datetime64_any_dtype(df[col]):
                          df['date'] = df[col].dt.strftime('%Y-%m-%d')
+                         date_col = 'date'
                          break
         else:
             df['date'] = df[date_col].dt.strftime('%Y-%m-%d')
 
-        if 'date' not in df.columns:
+        if not date_col or 'date' not in df.columns:
             print("Could not identify Date column")
             return []
 
-        # Handle Close column
-        if 'Close' in df.columns:
-            # Ensure it is a Series (handle potential DataFrame if multiple cols named Close existed)
-            close_data = df['Close']
-            if isinstance(close_data, pd.DataFrame):
-                close_data = close_data.iloc[:, 0]
-            
-            # Convert to native float to ensure JSON serializability
-            df['close'] = close_data.apply(lambda x: round(float(x), 2))
-        else:
-             print("Close column not found")
-             return []
-        
-        return df[['date', 'close']].to_dict('records')
+        # Convert to list of dicts manually to ensure type safety
+        results = []
+        for _, row in df.iterrows():
+            try:
+                # Basic fields
+                item = {
+                    'date': str(row['date'])
+                }
+                
+                # OHLC fields
+                has_data = False
+                for col_name in ['Open', 'High', 'Low', 'Close']:
+                    lower_col = col_name.lower()
+                    # Check original column name
+                    if col_name in df.columns:
+                        val = row[col_name]
+                        # Handle potential Series/Ambiguity if multiple columns have same name
+                        if isinstance(val, pd.Series):
+                            val = val.iloc[0]
+                        
+                        if pd.notna(val):
+                            item[lower_col] = round(float(val), 2)
+                            has_data = True
+                
+                if has_data and 'close' in item:
+                    results.append(item)
+            except Exception as row_err:
+                print(f"Skipping row due to error: {row_err}")
+                continue
+                
+        return results
 
     except Exception as e:
         print(f"Yahoo Finance Error: {e}")
@@ -144,6 +161,14 @@ def analyze_corn_health(polygon, start_date, end_date, index_type='NDRE'):
             .filterDate(start_date, end_date) \
             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
             .map(add_indices)
+
+        # MASK NON-CROPLAND PIXELS (ESA WorldCover)
+        # Class 40 = Cropland. This ensures we don't average forests/roads.
+        world_cover = ee.ImageCollection("ESA/WorldCover/v100").first()
+        cropland_mask = world_cover.select('Map').eq(40)
+        
+        # Apply mask to collection
+        collection = collection.map(lambda img: img.updateMask(cropland_mask))
 
         sat_dates = []
         sat_values = []
@@ -177,13 +202,46 @@ def analyze_corn_health(polygon, start_date, end_date, index_type='NDRE'):
         # 2. FINANCIAL DATA (Yahoo Finance)
         market_data = get_corn_futures(start_date, end_date)
 
+        # 3. STATISTICS (Correlation)
+        stats = {}
+        if sat_values and market_data:
+            # Create DataFrames
+            df_sat = pd.DataFrame({'date': pd.to_datetime(sat_dates), 'sat_val': sat_values})
+            df_mkt = pd.DataFrame(market_data)
+            df_mkt['date'] = pd.to_datetime(df_mkt['date'])
+            
+            # Merge on nearest date (within 5 days tolerance)
+            df_merged = pd.merge_asof(df_sat.sort_values('date'), 
+                                      df_mkt.sort_values('date'), 
+                                      on='date', 
+                                      direction='nearest', 
+                                      tolerance=pd.Timedelta(days=5))
+            
+            # Drop NaN rows (unmatched dates)
+            df_merged = df_merged.dropna()
+            
+            if len(df_merged) > 2:
+                correlation = df_merged['sat_val'].corr(df_merged['close'])
+                stats['pearson_correlation'] = round(correlation, 4)
+                
+                # Market Volatility (Std Dev of Close prices)
+                volatility = df_mkt['close'].std()
+                stats['market_volatility'] = round(volatility, 4)
+                
+                # Satellite Variability
+                sat_std = df_sat['sat_val'].std()
+                stats['sat_index_std'] = round(sat_std, 4)
+            else:
+                stats = {"message": "Not enough overlapping data for correlation."}
+
         return {
             "satelliteData": {
                 "dates": sat_dates,
                 "values": sat_values,
                 "index": index_type
             },
-            "marketData": market_data
+            "marketData": market_data,
+            "statistics": stats
         }
 
     except Exception as e:
@@ -334,11 +392,111 @@ def predict_vegetation_sarima(dates, values):
 
 
 
+SESSION_FILE = 'user_session.json'
+
+
+
+
+
+
+
+@app.route('/save_session', methods=['POST'])
+
+
+
+def save_session():
+
+
+
+    try:
+
+
+
+        data = request.json
+
+
+
+        with open(SESSION_FILE, 'w') as f:
+
+
+
+            json.dump(data, f)
+
+
+
+        return jsonify({"status": "Session saved"})
+
+
+
+    except Exception as e:
+
+
+
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
+
+
+@app.route('/load_session', methods=['GET'])
+
+
+
+def load_session():
+
+
+
+    if os.path.exists(SESSION_FILE):
+
+
+
+        try:
+
+
+
+            with open(SESSION_FILE, 'r') as f:
+
+
+
+                data = json.load(f)
+
+
+
+            return jsonify(data)
+
+
+
+        except Exception as e:
+
+
+
+            return jsonify({"error": str(e)}), 500
+
+
+
+    return jsonify({})
+
+
+
+
+
+
+
 @app.route('/')
+
+
 
 def index():
 
+
+
     return send_from_directory('.', 'index.html')
+
+
+
+
 
 
 
